@@ -6,17 +6,22 @@ class LoopTransportControl(object):
         self.startOnLoopStart = startOnLoopStart
         self.stopOnLoopEnd = stopOnLoopEnd
         self.resetMetronomeOnStop = resetMetronomeOnStop
+        self.clockStarted = False
         self.started = False
         self.running = False
         self.lmm = LoopMidiMetronomeCounter(beatsPerLoop)
         self.lmm.reset()
         self.status = None
         self.loopPos = None
+        self.currMidiMessage = None
 
-    def on_finish(self):
+    def on_clock_start(self):
         pass  # print(self.loopPos)
 
     def on_start(self):
+        pass  # print(self.loopPos)
+
+    def on_stop(self):
         pass  # print(self.loopPos)
 
     def on_running(self):
@@ -41,6 +46,7 @@ class LoopTransportControl(object):
         pass
 
     def parseMessage(self, message):
+        self.currMidiMessage = message
         if message.type == 'clock':
             self.loopPos = self.lmm.click()
             isLoopStart = isLoopEnd = False
@@ -75,7 +81,7 @@ class LoopTransportControl(object):
                         self.status = "stop"
                         if self.resetMetronomeOnStop:
                             self.lmm.reset()
-                        self.on_finish()
+                        self.on_stop()
                     else:
                         self.status = 'autostopping'
                         self.on_auto_finish()
@@ -88,13 +94,18 @@ class LoopTransportControl(object):
                         self.status = "stop"
                         if self.resetMetronomeOnStop:
                             self.lmm.reset()
-                        self.on_finish()
+                        self.on_stop()
         elif message.type == 'start':
-            self.started = True
+            self.clockStarted = True
+            self.lmm.reset()
+            self.on_clock_start()
+            self.loopPos = self.lmm.click()
         elif message.type == 'stop':
             self.started = False
+        elif message.type == 'control_change' and message.control == 9:
+            self.started = True
 
-        return self.status
+        return self.status,self.currMidiMessage,self.loopPos
 
     def run(self, inPort):
         for message in inPort:

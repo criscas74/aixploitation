@@ -105,7 +105,7 @@ MODEL_FILE = MODELS_DIR + "%s.tar"%MODEL_NAME
 
 VELOCITY_TRESHOLD = 30
 QUANTIZATION_STEP = 4 #1/16
-TEMPERATURE = 1
+TEMPERATURE = .1
 
 class Drumifier():
     def __init__(self,modelName=MODEL_NAME,modelFile=MODEL_FILE):
@@ -143,7 +143,11 @@ class Drumifier():
         return self.tapSequence
 
     def drumify(self):
-        self.drumSequence = drumify(self.tapSequence,self.model)
+        try:
+            self.drumSequence = drumify(self.tapSequence,self.model)
+            print("DRUMIFIEDDDD")
+        except Exception as e:
+            print(str(e))
         return self.drumSequence
 
     def drumSeq2audio(self,sf2_path=None):
@@ -157,8 +161,9 @@ class Drumifier():
         if quantize:
             self.quantizeTapSequence(quantizationSteps)
         self.drumify()
-        self.drumSeq2audio()
-        return self.drumSeq2audio()
+        if self.drumSequence is not None:
+            drumData = self.drumSeq2audio()
+            return {"data":self.drumAudio.astype('float32')}
 
 
 if __name__ == '__main__':
@@ -174,18 +179,21 @@ if __name__ == '__main__':
     tapSeq = df.makeTapSequenceFromAudioFeatures()
     print("--------- TAP_SEQUENCE ----------")
     pp(tapSeq)
+    tsa = seq2audio(tapSeq,RATE)
+    librosa.output.write_wav("../out/tapsequence.wav", tsa, sr)
 
     qtzTapSeq = df.quantizeTapSequence()
     print("--------- QUANTIZED_TAP_SEQUENCE ----------")
     pp(qtzTapSeq)
+    qtsa = seq2audio(qtzTapSeq,RATE)
+    librosa.output.write_wav("../out/quantized_tapsequence.wav", qtsa, sr)
 
     drumSeq = df.drumify()
     print("--------- DRUM_SEQUENCE ----------")
     pp(drumSeq)
 
-    drumAudio = df.drumSeq2audio() #"../soundfonts/tabla.sfz")
+    drumAudio = df.drumSeq2audio("../soundfonts/aracno.sf2")
     print("--------- DRUM_AUDIO ----------")
     pp(drumAudio)
-
     librosa.output.write_wav("../out/drumified.wav", drumAudio, sr)
 

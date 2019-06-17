@@ -63,6 +63,7 @@ class Player():
         self.p = pyaudio.PyAudio()
         self.rate = RATE
         self.fulldata = np.array([])
+        self.lenFullData = 0
         self.buffpos = 0
         self.running = False
         self.startTime = self.stopTime = self.duration = 0
@@ -77,25 +78,36 @@ class Player():
             stream_callback = self.callback
         )
 
+        self.stream.start_stream()
+
     def callback(self,in_data, frame_count, time_info, status):
+        audio_data = np.zeros(frame_count * CHANNELS).tostring()
         newBuf = self.buffpos + CHUNK
-        audio_data = self.fulldata[self.buffpos:newBuf]
-        self.buffpos = newBuf
+        if self.running:
+            if newBuf <= self.lenFullData:
+                audio_data = self.fulldata[self.buffpos:newBuf]
+                self.buffpos = newBuf
+            else:
+                self.running = False
+        #print("callback", self.running, len(self.fulldata),len(audio_data),self.buffpos, in_data, frame_count, time_info, status)
         return (audio_data, pyaudio.paContinue)
 
     def start(self,inData=None):
-        self.stream.stop_stream()
-        self.buffpos = 0
+        #print("UEEEE")
+        #self.stream.stop_stream()
         if inData is not None:
             self.fulldata = inData
-            self.running = True
-            self.startTime = time.time()
-        print(type(self.fulldata))
-        pp(self.fulldata)
-        self.stream.start_stream()
+
+        self.lenFullData = len(self.fulldata)
+        self.buffpos = 0
+        self.running = True
+        self.startTime = time.time()
+        #print(type(self.fulldata))
+        #pp(self.fulldata)
+        #self.stream.start_stream()
 
     def is_active(self):
-        return self.stream.is_active()
+        return self.running #self.stream.is_active()
 
     def close(self):
         print("Closing all streams")
@@ -116,7 +128,7 @@ if __name__ == "__main__":
     filename = "../out/recording.wav"
     recording = {"data":[]}
 
-    #"""
+    """
     recorder = Recorder()
     print("Rec Starting in 3secs")
     time.sleep(3)
@@ -129,12 +141,14 @@ if __name__ == "__main__":
     print("saving %s"%filename)
     recorder.save(filename)
     recorder.close()
-    #"""
-    playFromFile = False
-    #playFromFile = True
+    """
+    #playFromFile = False
+    playFromFile = True
+    filename="../out/click.wav"
     player = Player()
     if playFromFile:
         player.load(filename)
+        time.sleep(2)
         player.start()
     else:
         plData = recording['data']
