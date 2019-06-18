@@ -90,8 +90,15 @@ def make_tap_sequence(tempo, onset_times, onset_frames, onset_velocities,
     return note_sequence
 
 def drumify(s, model, temperature=1.0):
+    import time
+    print("sleeping")
+    time.sleep(3)
+    #print("="*10000)
     encoding, mu, sigma = model.encode([s])
+    #pp(locals())
     decoded = model.decode(encoding, length=32, temperature=temperature)
+    #pp(decoded)
+    #print("=" * 10000)
     return decoded[0]
 
 def seq2audio(s,sr,sf2_path=None):
@@ -143,11 +150,12 @@ class Drumifier():
         return self.tapSequence
 
     def drumify(self):
-        try:
-            self.drumSequence = drumify(self.tapSequence,self.model)
-            print("DRUMIFIEDDDD")
-        except Exception as e:
-            print(str(e))
+        pp(self.tapSequence)
+        self.drumSequence = drumify(self.tapSequence,self.model)
+        print("DRUMIFIEDDDD")
+        pp(self.drumSequence)
+        #except Exception as e:
+        #    print(str(e))
         return self.drumSequence
 
     def drumSeq2audio(self,sf2_path=None):
@@ -155,14 +163,28 @@ class Drumifier():
         return self.drumAudio
 
     def loopAudioDataToDrumAudioData(self,inData,quantize=True,quantizationSteps=QUANTIZATION_STEP):
+        print("Son dentro")
+        #pp(inData)
+        print("setAudioLoopdata")
         self.setAudioLoopdata(inData)
+        print("extractAudioFeatures")
         self.extractAudioFeatures()
+        print("makeTapSequenceFromAudioFeatures")
         self.makeTapSequenceFromAudioFeatures()
         if quantize:
+            print("quantizeTapSequence")
             self.quantizeTapSequence(quantizationSteps)
+        print("drumify")
         self.drumify()
+        print("START_DRUMIFIED SEQUENCE")
+        #pp(self.drumSequence)
+        print("END_DRUMIFIED SEQUENCE")
+
+        self.drumSequence = self.tapSequence
         if self.drumSequence is not None:
+            print("drumSeq2audio")
             drumData = self.drumSeq2audio()
+            print("Returning")
             return {"data":self.drumAudio.astype('float32')}
 
 
