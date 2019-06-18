@@ -10,11 +10,6 @@ from magenta.music import midi_synth
 from magenta.protobuf import music_pb2
 
 
-def drumify(s, model, temperature=1.0):
-    encoding, mu, sigma = model.encode([s])
-    decoded = model.decode(encoding, length=32, temperature=temperature)
-    return decoded[0]
-
 def combine_sequences_with_lengths(sequences, lengths):
     seqs = copy.deepcopy(sequences)
     total_shift_amount = 0
@@ -53,6 +48,18 @@ def mix_tracks(y1, y2, stereo=False):
     else:
         return y1 + y2
 
+####################
+# CUSTOM FUNCTS
+####################
+def changeInstrument(sequence,instrument):
+  subsequence = music_pb2.NoteSequence()
+  subsequence.CopyFrom(sequence)
+  del subsequence.notes[:]
+  for note in sequence.notes:
+    new_note = subsequence.notes.add()
+    new_note.CopyFrom(note)
+    new_note.instrument = instrument
+  return subsequence
 
 ##############################
 # CORE FUNCTIONS
@@ -89,17 +96,13 @@ def make_tap_sequence(tempo, onset_times, onset_frames, onset_velocities,
             pass
     return note_sequence
 
-def drumify(s, model, temperature=1.0):
-    import time
-    print("sleeping")
-    time.sleep(3)
-    #print("="*10000)
-    encoding, mu, sigma = model.encode([s])
-    #pp(locals())
-    decoded = model.decode(encoding, length=32, temperature=temperature)
-    #pp(decoded)
-    #print("=" * 10000)
-    return decoded[0]
+def drumify(s, model, temperature=.1):
+    try:
+        encoding, mu, sigma = model.encode([s])
+        decoded = model.decode(encoding, length=32, temperature=temperature)
+        return decoded[0]
+    except Exception as e:
+        print(str(e))
 
 def seq2audio(s,sr,sf2_path=None):
     return librosa.util.normalize(midi_synth.fluidsynth(s, sample_rate=sr,sf2_path=sf2_path))
@@ -112,11 +115,12 @@ MODEL_FILE = MODELS_DIR + "%s.tar"%MODEL_NAME
 
 VELOCITY_TRESHOLD = 30
 QUANTIZATION_STEP = 4 #1/16
-TEMPERATURE = .1
+TEMPERATURE = .5
 
 class Drumifier():
     def __init__(self,modelName=MODEL_NAME,modelFile=MODEL_FILE):
         self.model = TrainedModel(configs.CONFIG_MAP[modelName], 1, checkpoint_dir_or_path=modelFile)
+        self.temperature = TEMPERATURE
         self.inAudioLoopData = np.array([])
         self.inAudioLoopFeatures = dict()
         self.rate = RATE
@@ -150,42 +154,37 @@ class Drumifier():
         return self.tapSequence
 
     def drumify(self):
-        pp(self.tapSequence)
-        self.drumSequence = drumify(self.tapSequence,self.model)
-        print("DRUMIFIEDDDD")
-        pp(self.drumSequence)
-        #except Exception as e:
-        #    print(str(e))
+        print("Drumifying with temperature: %s"%self.temperature)
+        self.drumSequence = drumify(self.tapSequence,self.model,self.temperature)
         return self.drumSequence
 
     def drumSeq2audio(self,sf2_path=None):
         self.drumAudio = seq2audio(self.drumSequence,self.rate,sf2_path)
         return self.drumAudio
 
-    def loopAudioDataToDrumAudioData(self,inData,quantize=True,quantizationSteps=QUANTIZATION_STEP):
-        print("Son dentro")
-        #pp(inData)
-        print("setAudioLoopdata")
+    """def changeInstrument(self,instrument):
+        self.drumSequence = changeInstrument(self.drumSequence,instrument)
+        return self.drumSequence
+        """
+
+    def loopAudioDataToDrumAudioData(self,inData,quantize=True,quantizationSteps=QUANTIZATION_STEP,temperature=None): #,instrument=None):
+        if temperature is not None:
+            self.temperature = temperature
         self.setAudioLoopdata(inData)
-        print("extractAudioFeatures")
         self.extractAudioFeatures()
-        print("makeTapSequenceFromAudioFeatures")
         self.makeTapSequenceFromAudioFeatures()
         if quantize:
-            print("quantizeTapSequence")
             self.quantizeTapSequence(quantizationSteps)
-        print("drumify")
         self.drumify()
-        print("START_DRUMIFIED SEQUENCE")
-        #pp(self.drumSequence)
-        print("END_DRUMIFIED SEQUENCE")
+        if self.drumSequence is None:
+            print("Something went terribly wrong: no drum sequence!!! - Fallbacking to tap sequence!")
+            self.drumSequence = self.tapSequence
 
-        self.drumSequence = self.tapSequence
-        if self.drumSequence is not None:
-            print("drumSeq2audio")
-            drumData = self.drumSeq2audio()
-            print("Returning")
-            return {"data":self.drumAudio.astype('float32')}
+        #if instrument is not None:
+        #    self.changeInstrument(instrument)
+
+        self.drumSeq2audio()
+        return {"data":self.drumAudio.astype('float32')}
 
 
 if __name__ == '__main__':
@@ -213,6 +212,11 @@ if __name__ == '__main__':
     drumSeq = df.drumify()
     print("--------- DRUM_SEQUENCE ----------")
     pp(drumSeq)
+
+    """instrument = 11
+    drumSeq = df.changeInstrument(instrument)
+    print("--------- CHANGE INSTRUMENT ----------")
+    pp(drumSeq)"""
 
     drumAudio = df.drumSeq2audio("../soundfonts/aracno.sf2")
     print("--------- DRUM_AUDIO ----------")

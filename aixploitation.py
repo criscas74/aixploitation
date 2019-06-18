@@ -16,24 +16,28 @@ RATE = 44100
 MODELS_DIR = "models/"
 MODEL_NAME = 'groovae_2bar_tap_fixed_velocity'
 MODEL_FILE = MODELS_DIR + "%s.tar"%MODEL_NAME
+TEMPERATURE = 1
 
 OUTDIR = "out/"
 RECORDING_OUTFILE = OUTDIR + "recording.wav"
 
 class Aixploitation(object):
-    def __init__(self,inportName,throughportName,beatsPerLoop=2,startOnLoopStart=True,stopOnLoopEnd=True,resetMetronomeOnStop=False):
+    def __init__(self,inportName,throughportName,beatsPerLoop=2,startOnLoopStart=True,stopOnLoopEnd=True,resetMetronomeOnStop=False,temperature=TEMPERATURE):
 
         #import librosa
         #self.click,_ = librosa.load("out/click.wav",RATE)
 
-        self.transport = BackgroundLoopTransportControl(inportName=inportName,throughportName=throughportName,beatsPerLoop=beatsPerLoop)
+
         self.recording = None
         self.drumloop = None
         self.playingback = True
         self.unit = 0
         self.beat = 0
         self.status = None
+        self.temperature = temperature
 
+        self.transport = BackgroundLoopTransportControl(inportName=inportName, throughportName=throughportName,
+                                                        beatsPerLoop=beatsPerLoop)
         self.recorder = Recorder()
         self.player = Player()
         self.drumifier = Drumifier(modelName=MODEL_NAME,modelFile=MODEL_FILE)
@@ -50,7 +54,7 @@ class Aixploitation(object):
         self.recording = self.recorder.stop()
         #self.recorder.save(filename=RECORDING_OUTFILE)
         #pp(self.recording)
-        self.drumloop = self.drumifier.loopAudioDataToDrumAudioData(self.recording['data'])
+        self.drumloop = self.drumifier.loopAudioDataToDrumAudioData(self.recording['data'],temperature=self.temperature)
 
     def on_loop_start(self):
         #pp(self.recording)
@@ -91,42 +95,31 @@ class Aixploitation(object):
                 #print(self.transport.get_status())
             time.sleep(.01)
 
-    def OLD_run(self, inPort, throughPort):
-        precunit = None
-        precbeat = None
-        for message in inPort:
-            throughPort.send(message)
-            self.currMidiMessage = self.parseMessage(message)
-            if self.loopPos['beat'] != precbeat:
-                print("---------- BEAT %s ----------"%self.loopPos['beat'])
-                #self.player.start(self.click)
-                precbeat = self.loopPos['beat']
-
-            if self.loopPos['unit'] != precunit:
-                print(self.loopPos['unit'],self.drumloop)
-                precunit = self.loopPos['unit']
-
-
-
-
-
 if __name__ == '__main__':
+
+    # python2 aixploitation.py "MIDI4x4 Midi In 1" "MIDI4x4 Midi Out 1"
+
     import sys
     from rtmidi.midiutil import open_midiport
 
     # Prompts user for MIDI input port, unless a valid port number or name
-    """
-    in_name = sys.argv[1] if len(sys.argv) > 1 else None
-    out_name = sys.argv[2] if len(sys.argv) > 2 else None
-    try:
-        _,inport_name = open_midiport(in_name,type_="input")
-        _,throughport_name = open_midiport(out_name, type_="output")
-    except (EOFError, KeyboardInterrupt):
-        sys.exit()
-    """
+    inport_name = sys.argv[1] if len(sys.argv) > 1 else None
+    throughport_name = sys.argv[2] if len(sys.argv) > 2 else None
 
-    inport_name = 'MIDI4x4 Midi In 1'
-    throughport_name = 'MIDI4x4 Midi Out 1'
+    if inport_name is None:
+        try:
+            _, inport_name = open_midiport(inport_name, type_="input")
+        except (EOFError, KeyboardInterrupt):
+            sys.exit()
+
+    if throughport_name is None:
+        try:
+            _,throughport_name = open_midiport(throughport_name, type_="output")
+        except (EOFError, KeyboardInterrupt):
+            sys.exit()
+
+    #inport_name = 'MIDI4x4 Midi In 1'
+    #throughport_name = 'MIDI4x4 Midi Out 1'
 
     beatsPerLoop = 2
     print("Initializing")
