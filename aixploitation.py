@@ -4,7 +4,7 @@ import time
 import pyaudio
 import numpy as np
 
-from lib.loopTransportControl import BackgroundLoopTransportControl
+from lib.looper.looperTransportControl import LooperTransportControl
 from lib.playbackRecorder import Recorder,Player
 from lib.drumifier import Drumifier
 
@@ -21,83 +21,46 @@ TEMPERATURE = 1
 OUTDIR = "out/"
 RECORDING_OUTFILE = OUTDIR + "recording.wav"
 
-class Aixploitation(object):
-    def __init__(self,inportName,throughportName,beatsPerLoop=2,startOnLoopStart=True,stopOnLoopEnd=True,resetMetronomeOnStop=False,temperature=TEMPERATURE):
 
-        #import librosa
-        #self.click,_ = librosa.load("out/click.wav",RATE)
+class Aixploitation(LooperTransportControl):
+    def __init__(self,inport_name,throughport_name,measures_per_loop=2,temperature=TEMPERATURE):
+        super(Aixploitation,self).__init__(inport_name=inport_name,
+                                           throughport_name=throughport_name,
+                                           measures_per_loop=measures_per_loop)
 
-
-        self.recording = None
+        self.original_recording = None
         self.drumloop = None
-        self.playingback = True
-        self.unit = 0
-        self.beat = 0
-        self.status = None
         self.temperature = temperature
 
-        self.transport = BackgroundLoopTransportControl(inportName=inportName, throughportName=throughportName,
-                                                        beatsPerLoop=beatsPerLoop)
         self.recorder = Recorder()
         self.player = Player()
         self.drumifier = Drumifier(modelName=MODEL_NAME,modelFile=MODEL_FILE)
 
-    def on_clock_start(self):
-        print("clockStart",self.transportStatus)
-
-    def on_start(self):
+    def on_start_recording(self):
         self.recorder.start()
-        print("Recorder start",self.transportStatus)
+        print("Recorder starts")
 
-    def on_stop(self):
-        print("Recorder finish",self.transportStatus)
-        self.recording = self.recorder.stop()
-        #self.recorder.save(filename=RECORDING_OUTFILE)
+    def on_stop_recording(self):
+        print("Recorder finish")
+        self.original_recording = self.recorder.stop()
+        self.recorder.save(filename=RECORDING_OUTFILE)
         #pp(self.recording)
-        self.drumloop = self.drumifier.loopAudioDataToDrumAudioData(self.recording['data'],temperature=self.temperature)
+        self.drumloop = self.drumifier.loopAudioDataToDrumAudioData(self.original_recording['data'],temperature=self.temperature)
 
-    def on_loop_start(self):
-        #pp(self.recording)
-        print("loopStart",self.transportStatus)
-        if self.drumloop is not None and self.playingback:
+    def on_start_playback(self):
+        if self.drumloop is not None:
             self.player.start(self.drumloop['data'])
-            #self.player.start(self.recording['data'])
-            print("playback started", self.transportStatus)
+        else:
+            print("ERROR: NO DATA TO PLAYBACK")
 
-    def metronome(self,verbose=True):
-        unit = self.transportStatus['loopPosition']['unit']
-        beat = self.transportStatus['loopPosition']['beat']
-        if beat != self.beat:
-            self.beat = beat
-            if verbose:
-                print("---------- BEAT %s ----------" % beat)
-            # self.player.start(self.click)
-        if unit != self.unit:
-            self.unit = unit
-            if verbose:
-                print(unit, self.drumloop,self.transportStatus)
-
-    def run(self):
-        while 1:
-            self.transportStatus = self.transport.get_status()
-            self.metronome()
-            status = self.transportStatus['status']
-            if status != self.status:
-                self.status = status
-                if status == 'clock_started':
-                    self.on_clock_start()
-                elif status == 'loop_start':
-                    self.on_loop_start()
-                elif status == 'start':
-                    self.on_start()
-                elif status == 'stop':
-                    self.on_stop()
-                #print(self.transport.get_status())
-            time.sleep(.01)
+    def on_stop_playback(self): pass
 
 if __name__ == '__main__':
 
     # python2 aixploitation.py "MIDI4x4 Midi In 1" "MIDI4x4 Midi Out 1"
+
+    #inport_name = 'MIDI4x4 Midi In 1'
+    #throughport_name = 'MIDI4x4 Midi Out 1'
 
     import sys
     from rtmidi.midiutil import open_midiport
@@ -118,10 +81,7 @@ if __name__ == '__main__':
         except (EOFError, KeyboardInterrupt):
             sys.exit()
 
-    #inport_name = 'MIDI4x4 Midi In 1'
-    #throughport_name = 'MIDI4x4 Midi Out 1'
-
-    beatsPerLoop = 2
     print("Initializing")
-    aix = Aixploitation(inport_name,throughport_name,beatsPerLoop)
+    aix = Aixploitation(inport_name,throughport_name)
+    print("Run "*10)
     aix.run()

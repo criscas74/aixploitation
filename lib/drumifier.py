@@ -180,10 +180,16 @@ class Drumifier():
             print("Something went terribly wrong: no drum sequence!!! - Fallbacking to tap sequence!")
             self.drumSequence = self.tapSequence
 
+        print("saving all")
+        tsa = seq2audio(self.tapSequence,self.rate)
+        librosa.output.write_wav("out/tapsequence.wav", tsa, self.rate)
+        dsa = seq2audio(self.drumSequence,self.rate)
+        librosa.output.write_wav("out/drumsequence.wav",dsa, self.rate)
+
         #if instrument is not None:
         #    self.changeInstrument(instrument)
 
-        self.drumSeq2audio()
+        self.drumSeq2audio("soundfonts/tabla.sf2")
         return {"data":self.drumAudio.astype('float32')}
 
 
@@ -218,7 +224,13 @@ if __name__ == '__main__':
     print("--------- CHANGE INSTRUMENT ----------")
     pp(drumSeq)"""
 
-    drumAudio = df.drumSeq2audio("../soundfonts/aracno.sf2")
+    #drumAudio = df.drumSeq2audio("../soundfonts/aracno.sf2")
+    #drumAudio = df.drumSeq2audio("../soundfonts/TABLAS.sf2")
+    #drumAudio = df.drumSeq2audio("../soundfonts/fUNKNewKit.sf2")
+    #drumAudio = df.drumSeq2audio("../soundfonts/afro.sf2")
+    #drumAudio = df.drumSeq2audio("../soundfonts/guiro.sf2")
+    drumAudio = df.drumSeq2audio("../soundfonts/tabla.sf2")
+
     print("--------- DRUM_AUDIO ----------")
     pp(drumAudio)
     librosa.output.write_wav("../out/drumified.wav", drumAudio, sr)

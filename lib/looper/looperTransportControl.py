@@ -1,178 +1,186 @@
+from pprint import pprint as pp
+import time
+
 from lib.looper.looperMidiMetronome import LooperMidiMetronome
+
+
+class TransportStatus():
+    def __init__(self):
+        self.recorder = None
+        self.player = None
+
+    def __repr__(self):
+        d = self.__dict__.copy()
+        return "{}({!r})".format(type(self),d)
+
 
 class LooperTransportControl(object):
     def __init__(self,
-                 inport_name=None,
+                 inport_name,
                  throughport_name=None,
-                 numerator=4,
-                 denumerator=4,
-                 ppq=24,
                  measures_per_loop=1,
+                 metronome=LooperMidiMetronome,
                  start_on_loop_beginning=True,
-                 stop_on_loop_end=True):
+                 stop_on_loop_end=True,
+                 autostart_playback=True):
 
         self.start_on_loop_beginning = start_on_loop_beginning
         self.stop_on_loop_end = stop_on_loop_end
-        self.transport_status = None
+        self.autostart_playback = autostart_playback
 
-        self.metro = LooperMidiMetronome(inport_name=inport_name,
-                                         throughport_name=throughport_name,
-                                         numerator=numerator,
-                                         denumerator=denumerator,
-                                         ppq=ppq,
-                                         measures_per_loop=measures_per_loop)
+        self.loop_position = None
+        self.measure_count = None
+        self.unit_count = None
+        self.loop_qpm = None
+
+        self.transport_status = TransportStatus()
+        self.playback_data = None
+
+        self.metro = metronome(inport_name=inport_name,
+                               throughport_name=throughport_name,
+                               measures_per_loop=measures_per_loop)
+
+
         self.metro.run_in_background()
+        self.metro_new = True
+        self.metro_tstamp = None
 
         self.TRANSPORT_RULES = [
-            (self.have_to_start,self.start_recording)
-            (self.have_to_stop,self.stop_recording)
-            (self.have_to_playback,self.playback)
+            (self.asked_to_start_recording,
+             lambda: self.set_transport_status('recorder','asked_to_start')),
+
+            (self.asked_to_start_playback,
+             lambda: self.set_transport_status('player', 'asked_to_start')),
+
+            (self.have_to_start_recording,self.start_recording),
+            (self.have_to_stop_recording,self.stop_recording),
+
+            (self.have_to_start_playback,self.start_playback),
+            (self.have_to_stop_playback, self.stop_playback),
         ]
 
     #### TRANSPORT RULES ####
-    def have_to_start(self):
-        return self.transport_status == 'asked_to_start_recording' \
-               and (self.loop_position == 'beginning' or not self.start_on_loop_beginning)
 
-    def have_to_stop(self):
-        return self.transport_status == 'recording' \
+    ### CONDITIONS
+    asked_to_start_recording = lambda(self): self.metro_new and self.metro_message == 'start_recording'
+    asked_to_start_playback = lambda(self): self.metro_new and self.metro_message == 'start_playback'
+
+
+
+    def have_to_start_recording(self):
+        return self.metro_new \
+               and (
+                       self.transport_status.recorder == 'asked_to_start'
+                       and (self.loop_position == 'beginning' or not self.start_on_loop_beginning)
+               )
+
+    def have_to_stop_recording(self):
+        return self.metro_new \
+               and (
+                    self.transport_status.recorder == 'recording'
+                    and (self.loop_position == 'end' and self.stop_on_loop_end)
+                )
+
+    def have_to_start_playback(self):
+        return self.metro_new \
+               and (
+                       self.playback_data is not None
+                       and (self.loop_position == 'beginning' or not self.start_on_loop_beginning)
+                       and (
+                               self.transport_status.player == 'asked_to_start'
+                               or (self.autostart_playback and self.transport_status.player != 'playing')
+                            )
+               )
+
+    def have_to_stop_playback(self):
+        return self.metro_new \
+               and self.transport_status.player == 'playing' \
                and (self.loop_position == 'end' and self.stop_on_loop_end)
 
-    def have_to_playback(self):
-        return self.transport_status == 'recording' \
-               and (self.loop_position == 'end' and self.stop_on_loop_end)
+    ### ACTIONS
+    def start_recording(self):
+        self.on_start_recording()
+        self.set_transport_status('recorder','recording') # now record for real!
 
-    def start_recording(self): pass
-    def stop_recording(self):pass
-    def playback(self):pass
+    def stop_recording(self):
+        self.on_stop_recording()
+        self.playback_data = True
+        self.set_transport_status('recorder','stopped')
+
+    def start_playback(self):
+        self.on_start_playback()
+        self.set_transport_status('player','playing')
+
+    def stop_playback(self):
+        self.on_stop_playback()
+        self.set_transport_status('player', 'stopped')
 
 
-    def asked_to_start_recording(self):
-        self.transport_status = 'asked_to_start_recording' if self.start_on_loop_beginning else 'recording'
+    ### EVENTS
+    def on_start_recording(self): pass #only for testing purposes
+    def on_stop_recording(self): pass
+    def on_start_playback(self): pass
+    def on_stop_playback(self): pass
 
-    def update_status(self):
-        self.metro_running = self.metro.status.running
-        self.metro_message = self.metro.status.message
-        self.loop_position = self.metro.status.loop_landmark
-        self.loop_qpm = self.metro.status.qpm
 
-    def is_must_start(self):
-        return True
+    ### TRANSPORT FUNCTIONNALITIES
+    def set_transport_status(self, attr, status):
+        setattr(self.transport_status, attr, status)
+        print(self.transport_status)
 
-    def start_recoding(self):
-        pass
+    def update_metro_status(self):
+        self.metro_new = True
+        status = self.metro.status
 
-    def transport(self):
+        self.metro_tstamp = status.tstamp
+        self.metro_running = status.running
+        self.metro_message = status.message
+        self.metro_midi_message = status.midi_message
+
+        self.loop_position = status.loop_landmark
+        self.measure_count = status.measure
+        self.unit_count = status.unit
+        self.loop_qpm = status.qpm
+
+    def apply_rules(self):
         for rule,command in self.TRANSPORT_RULES:
             if rule():
                 command()
 
     def react(self):
-        self.transport()
+        self.apply_rules()
 
     def run(self):
         while 1:
-            self.update_status()
-            self.react()
-            print(self.transport_status)
-            time.sleep(.01)
+            old_measure = self.measure_count
+            old_unit = self.unit_count
+            old_loop_pos = self.loop_position
 
-
-
-
-
-
-"""
-
-    def parseMessage(self, message):
-
-            if not self.running:
-                if self.started:
-                    if self.startOnLoopStart:
-                        if isLoopStart:
-                            self.running = True
-                            self.status = "start"
-                            self.on_start()
-                        else:
-                            self.status = 'starting'
-                            self.on_starting()
-                    else:
-                        self.running = True
-                        self.status = 'start'
-                        self.lmm.reset()
-                else:
-                    self.on_sleeping()
+            if self.metro_tstamp != self.metro.status.tstamp:
+                self.update_metro_status()
             else:
-                if self.stopOnLoopEnd:
-                    if isLoopEnd:
-                        self.started = False
-                        self.running = False
-                        self.status = "stop"
-                        if self.resetMetronomeOnStop:
-                            self.lmm.reset()
-                        self.on_stop()
-                    else:
-                        self.status = 'autostopping'
-                        self.on_auto_finish()
-                else:
-                    if self.started:
-                        self.status = "running"
-                        self.on_running()
-                    else:
-                        self.running = False
-                        self.status = "stop"
-                        if self.resetMetronomeOnStop:
-                            self.lmm.reset()
-                        self.on_stop()
-        elif message.type == 'start':
-            self.clockStarted = True
-            self.lmm.reset()
-            self.status = "clock_started"
-            self.on_clock_start()
-            self.loopPos = self.lmm.click()
-        elif message.type == 'stop':
-            self.started = False
-            self.status = "stop_started"
-        elif message.type == 'control_change' and message.control == 9:
-            self.started = True
-            self.status = "record_started"
+                self.metro_new = False
 
-        return self.status, self.currMidiMessage, self.loopPos
+            if self.loop_position and self.loop_position != old_loop_pos:
+                print("-"*100 + "\nLoop: %s"%self.loop_position)
+            if self.measure_count != old_measure:
+                print("Measure: %s"%self.measure_count)
+            if self.unit_count != old_unit:
+                print("Unit: %s"%self.metro.status.unit)
 
-    def _run_proc(self):
-        for message in self.inport:
-            if self.throughport is not None:
-                self.throughport.send(message)
-            self.parseMessage(message)
-            self.loopStatus = self.loopPos['tick']  # self.status #self.get_status()
-
-    def run(self, inport=None, throughport=None):
-        if inport: self.inport = inport
-        if throughport: self.throughport = throughport
-        self._run_proc()
-
-    def get_status(self):
-        return {"status": self.status, "loopPosition": self.loopPos, "message": self.currMidiMessage}
-
-"""
+            self.react()
+            time.sleep(.01)
 
 
 if __name__ == '__main__':
     import mido
     import time
-    port = mido.open_output('test', virtual=True)
 
-    t = LooperTransportControl(inport_name='test')
+    #launch looperMidiMetronome
+    inport_name = 'test'
 
-    start = mido.Message('start')
-    stop = mido.Message('stop')
-    clock = mido.Message('clock')
-    change = mido.Message('control_change', control=9, value=127)
+    inport_name = 'MIDI4x4 Midi In 1'
 
-    messages = [start] * 1 + [clock] * 48 + [change] * 1 + [clock] * 3 + [stop]
-    print(messages)
-
-    for msg in messages:
-        port.send(msg)
-        time.sleep(.1)
-        print(t.status)
+    t = LooperTransportControl(inport_name=inport_name,measures_per_loop=2)
+    print("START!")
+    t.run()

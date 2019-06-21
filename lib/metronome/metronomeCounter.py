@@ -1,11 +1,9 @@
-from pprint import pprint as pp
-from loopStatus import LoopStatus
+from metronomeStatus import MetronomeStatus
 
-class MidiMetronomeCounter(object):
-    def __init__(self, numerator=4, denumerator=4, ppq=24, measures=1):
+class MetronomeCounter(object):
+    def __init__(self, numerator=4, denumerator=4, measures=1, ppq=24):
         self.started = False
-
-        self.ticks_per_unit = ppq / (denumerator / 4)
+        self.ticks_per_unit = ppq // (denumerator // 4)
         self.ticks_per_whole = self.ticks_per_unit * numerator
         self.ticks_per_loop = self.ticks_per_whole * measures
         self.last_tick = self.ticks_per_loop - 1
@@ -14,7 +12,7 @@ class MidiMetronomeCounter(object):
         self._measures = [x // self.ticks_per_whole for x in self._ticks]
         self._units = [x // self.ticks_per_unit - y * numerator for x, y in zip(self._ticks, self._measures)]
 
-        self.loopStatus = LoopStatus(self.last_tick)
+        self.metroStatus = MetronomeStatus(self.last_tick)
 
         self._ticks_cycle = self._units_cycle = self._measures_cycle = None
 
@@ -32,19 +30,22 @@ class MidiMetronomeCounter(object):
         self._measures_cycle = self.cycler(self._measures)
 
     def click(self):
-        self.loopStatus.tick = next(self._ticks_cycle)
-        self.loopStatus.unit = next(self._units_cycle)
-        self.loopStatus.measure = next(self._measures_cycle)
+        self.metroStatus.tick = next(self._ticks_cycle)
+        self.metroStatus.unit = next(self._units_cycle)
+        self.metroStatus.measure = next(self._measures_cycle)
 
 
 if __name__ == '__main__':
-    lmm = MidiMetronomeCounter(2,5,4) # loop di 2 battute in 5/4
+    #lmm = MetronomeCounter(2, 5, 4) # loop di 2 battute in 5/4
+
+    lmm = MetronomeCounter(numerator=4, denumerator=4, measures=2)  # loop di 2 battute in 4/4
     lmm.reset()
     for x in range(384 * 4):
         lmm.click()
-        status = lmm.loopStatus
+        status = lmm.metroStatus
         if status.loop_landmark == 'beginning':
             print("-"*100)
-        elif status.loop_landmark == 'end':
-            print("="*100)
+            print('beginning')
         print(status)
+        if status.loop_landmark == 'end':
+            print("end")

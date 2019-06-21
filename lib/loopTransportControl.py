@@ -1,8 +1,6 @@
-from lib.midiMetronomeCounter import LoopMidiMetronomeCounter
+from lib.metronome.metronomeCounter import LoopMidiMetronomeCounter
 import mido
-import time
 import threading
-
 
 class LoopTransportControl(object):
     def __init__(self, inportName=None, throughportName=None, beatsPerLoop=2, startOnLoopStart=True, stopOnLoopEnd=True, resetMetronomeOnStop=False):

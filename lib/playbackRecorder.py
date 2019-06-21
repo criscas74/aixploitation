@@ -46,6 +46,7 @@ class Recorder(object):
         return ret
 
     def save(self,filename,data=None):
+        print("SAVING %s - %s"%(filename,data))
         if data is None:
             data = self.fulldata
         librosa.output.write_wav(filename, data, RATE)
