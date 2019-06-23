@@ -12,7 +12,7 @@ class MetronomeCounter(object):
         self._measures = [x // self.ticks_per_whole for x in self._ticks]
         self._units = [x // self.ticks_per_unit - y * numerator for x, y in zip(self._ticks, self._measures)]
 
-        self.metroStatus = MetronomeStatus(self.last_tick)
+        self.metro_status = MetronomeStatus(self.last_tick)
 
         self._ticks_cycle = self._units_cycle = self._measures_cycle = None
 
@@ -30,9 +30,9 @@ class MetronomeCounter(object):
         self._measures_cycle = self.cycler(self._measures)
 
     def click(self):
-        self.metroStatus.tick = next(self._ticks_cycle)
-        self.metroStatus.unit = next(self._units_cycle)
-        self.metroStatus.measure = next(self._measures_cycle)
+        self.metro_status.tick = next(self._ticks_cycle)
+        self.metro_status.unit = next(self._units_cycle)
+        self.metro_status.measure = next(self._measures_cycle)
 
 
 if __name__ == '__main__':
@@ -42,7 +42,7 @@ if __name__ == '__main__':
     lmm.reset()
     for x in range(384 * 4):
         lmm.click()
-        status = lmm.metroStatus
+        status = lmm.metro_status
         if status.loop_landmark == 'beginning':
             print("-"*100)
             print('beginning')

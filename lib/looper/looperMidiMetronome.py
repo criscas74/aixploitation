@@ -1,4 +1,5 @@
 from lib.metronome.midiMetronome import MidiMetronome
+from pprint import pprint as pp
 
 class LooperMidiMetronome(MidiMetronome):
     def __init__(self,
@@ -15,15 +16,15 @@ class LooperMidiMetronome(MidiMetronome):
                                                   measures_per_loop=measures_per_loop,
                                                   ppq=ppq)
 
-        self.mmp.MESSAGES_RULES['control_change'] = lambda: self.mmp.check_and_apply(self.midi_message.control,
-                                                                                     self.CONTROL_CHANGE_RULES)
+        self.MESSAGES_RULES['control_change'] = lambda: self.check_and_apply(self.midi_message.control,
+                                                                             self.CONTROL_CHANGE_RULES)
 
         self.CONTROL_CHANGE_RULES = {
             9: self.start_recording
         }
 
     def start_recording(self):
-        self.metroStatus.message = 'start_recording'
+        self.metro_status.message = 'start_recording'
 
 if __name__ == '__main__':
     import mido
@@ -53,10 +54,10 @@ if __name__ == '__main__':
 
     """
     inport_name = 'MIDI4x4 Midi In 1'
-    m = MidiMetronome(inport_name=inport_name)
+    m = LooperMidiMetronome(inport_name=inport_name)
     m.run_in_background()
 
     while 1:
         time.sleep(.01)
         print(m.status.tick, m.status.unit, m.status.measure,
-              m.status.loop_landmark, m.status.running, "-", m.message.type)
+              m.status.loop_landmark, m.status.running, m.status.message, "-", m.midi_message)

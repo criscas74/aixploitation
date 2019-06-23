@@ -3,38 +3,22 @@ import mido
 from mido.frozen import freeze_message
 import time
 import threading
+from collections import deque
 
 from metronomeStatus import  MetronomeStatus
 from metronomeCounter import MetronomeCounter
 
-class MidiMessageParser():
-    def __init__(self):
-        self.MESSAGES_RULES = {
-            'clock':            self.on_clock,
-            'start':            self.on_start,
-            'stop':             self.on_stop,
-            'control_change':   self.on_control_change,
-            'sysex':            self.on_sysex
-        }
 
-        self.message =  None
+"""
+TODO:
+- se no input usa clock interno
+    - se no qpm entra in modo tap tempo (magari con un pedale nel g2m)
+    - se no tap apri audio in e fai beat detection
+    
+- aspetta di avere un bpm di riferimento prima di partire
 
-    def on_clock(self): pass
-    def on_start(self): pass
-    def on_stop(self): pass
-    def on_control_change(self): pass
-    def on_sysex(self):pass
-
-    def check_and_apply(self,k,d):
-        if k in d:
-            d[k]()
-        else:
-            pass # TODO implement logging
-
-    def parse_message(self,message):
-        self.message = message
-        self.check_and_apply(self.message.type, self.MESSAGES_RULES)
-
+LOGGING!
+"""
 
 class MidiMetronome(MetronomeCounter):
     def __init__(self,
@@ -52,22 +36,38 @@ class MidiMetronome(MetronomeCounter):
         self.inport = mido.open_input(inport_name) if inport_name is not None else None
         self.throughport = mido.open_output(throughport_name) if throughport_name is not None else None
 
+        self.ppq = ppq
+        self.qpm_min_samples = ppq * 8
+        self.queue = deque(maxlen=self.qpm_min_samples * 2)
+        self.last_bpm = None
+
         self.midi_message = None
-        self.mmp = MidiMessageParser()
-        self.mmp.MESSAGES_RULES = {
+        self.MESSAGES_RULES = {
             'clock':            self.metro_clock,
             'start':            self.metro_start,
             'stop':             self.metro_stop,
         }
 
-        self.metroStatus = MetronomeStatus(self.last_tick)
+        self.metro_status = MetronomeStatus(self.last_tick)
 
-    def run_in_background(self):
-        thread = threading.Thread(target=self.run, args=())
-        thread.daemon = True
-        thread.start()
+    @property
+    def qpm(self):
+        if len(self.queue) >= self.ppq:
+            return (60. / ( (self.queue[-1] - self.queue[0]) / len(self.queue) * self.ppq))
+
+    # FOR MANAGING MIDI RULES
+    def check_and_apply(self,k,d):
+        if k in d:
+            d[k]()
+        else:
+            pass # TODO implement logging
+
+    def parse_midi_message(self,message):
+        self.message = message
+        self.check_and_apply(self.message.type, self.MESSAGES_RULES)
 
     def metro_clock(self):
+        self.queue.append(time.time())
         if self.started:
             self.click()
 
@@ -79,30 +79,37 @@ class MidiMetronome(MetronomeCounter):
         self.started = False
 
     ### METRONOME LOGIC ###
-
     @property
     def status(self):
-        return self.metroStatus
+        return self.metro_status
 
     def click(self):
-        self.metroStatus.qpm = 120 # TODO calculate bpm
-        self.metroStatus.tick = next(self._ticks_cycle)
-        self.metroStatus.unit = next(self._units_cycle)
-        self.metroStatus.measure = next(self._measures_cycle)
+        if self.metro_status.qpm is not None:
+            self.metro_status.tick = next(self._ticks_cycle)
+            self.metro_status.unit = next(self._units_cycle)
+            self.metro_status.measure = next(self._measures_cycle)
 
     def react(self):
-        self.metroStatus.message = None
-        self.mmp.parse_message(self.midi_message)
+        self.metro_status.message = None
+        self.parse_midi_message(self.midi_message)
 
+    # BLOCKING RUN
     def run(self):
         for message in self.inport:
             self.midi_message = message
-            self.metroStatus.tstamp = time.time()
-            self.metroStatus.midi_message = freeze_message(message)
+            self.metro_status.tstamp = time.time()
+            self.metro_status.qpm = self.qpm
+            self.metro_status.midi_message = freeze_message(message)
             if self.throughport is not None:
                 self.throughport.send(message)
             self.react()
-            self.metroStatus.running = self.started
+            self.metro_status.running = self.started
+
+    # USE THREADING FOR RUNNING IN BACKGROUND
+    def run_in_background(self):
+        thread = threading.Thread(target=self.run, args=())
+        thread.daemon = True
+        thread.start()
 
 
 if __name__ == '__main__':
@@ -127,7 +134,6 @@ if __name__ == '__main__':
         #print(m.status)
     """
 
-
     inport_name = 'MIDI4x4 Midi In 1'
     m =MidiMetronome(inport_name=inport_name)
     m.run_in_background()
@@ -135,4 +141,4 @@ if __name__ == '__main__':
     while 1:
         time.sleep(.01)
         print( m.status.tick, m.status.unit, m.status.measure,
-               m.status.loop_landmark, m.status.running, "-", m.message.type)
+               m.status.loop_landmark, m.status.running, m.status.qpm, "-", m.midi_message.type if m.midi_message is not None else None)

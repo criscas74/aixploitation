@@ -30,6 +30,7 @@ class Aixploitation(LooperTransportControl):
 
         self.original_recording = None
         self.drumloop = None
+        self.drumloop_age = 0
         self.temperature = temperature
 
         self.recorder = Recorder()
@@ -45,15 +46,25 @@ class Aixploitation(LooperTransportControl):
         self.original_recording = self.recorder.stop()
         self.recorder.save(filename=RECORDING_OUTFILE)
         #pp(self.recording)
-        self.drumloop = self.drumifier.loopAudioDataToDrumAudioData(self.original_recording['data'],temperature=self.temperature)
+        self.generate_drumloop()
 
     def on_start_playback(self):
+        print(self.drumloop_age)
+        if self.drumloop_age > 3:
+            self.generate_drumloop()
         if self.drumloop is not None:
             self.player.start(self.drumloop['data'])
+            self.drumloop_age += 1
         else:
             print("ERROR: NO DATA TO PLAYBACK")
 
     def on_stop_playback(self): pass
+
+    def generate_drumloop(self):
+        drumloop = self.drumifier.loopAudioDataToDrumAudioData(self.original_recording['data'],temperature=self.temperature)
+        if drumloop is not None:
+            self.drumloop = drumloop
+            self.drumloop_age = 0
 
 if __name__ == '__main__':
 
